@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 100%;
+      min-height: 300px;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      padding: 16px;
+    }
+
+    h1 {
+      font-size: 18px;
+      text-align: center;
+      margin-bottom: 16px;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .section { margin-bottom: 12px; }
+
+    .drop-zone {
+      border: 2px dashed #444;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      color: #888;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #6c63ff;
+      background: rgba(108, 99, 255, 0.1);
+    }
+
+    .drop-zone.has-file {
+      border-color: #4caf50;
+      color: #4caf50;
+    }
+
+    .file-name {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #aaa;
+      word-break: break-all;
+    }
+
+    .settings {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .settings label {
+      font-size: 12px;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    .settings input {
+      flex: 1;
+      background: #16213e;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #e0e0e0;
+      padding: 6px 8px;
+      font-size: 12px;
+      outline: none;
+    }
+
+    .settings input:focus { border-color: #6c63ff; }
+
+    .settings-icon {
+      cursor: pointer;
+      font-size: 16px;
+      color: #888;
+      transition: color 0.2s;
+      user-select: none;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .settings-icon:hover { color: #6c63ff; }
+
+    .provider-settings {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .provider-settings label {
+      font-size: 12px;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    #providerSettingsPanel, .general-settings-panel {
+      background: #16213e;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 10px;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-start {
+      background: #6c63ff;
+      color: #fff;
+    }
+
+    .btn-start:hover:not(:disabled) { background: #5a52d5; }
+
+    .btn-stop {
+      background: #e74c3c;
+      color: #fff;
+    }
+
+    .btn-stop:hover:not(:disabled) { background: #c0392b; }
+
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      font-size: 13px;
+      color: #aaa;
+    }
+
+    .stats span { color: #6c63ff; font-weight: 600; }
+
+    #log {
+      background: #16213e;
+      border-radius: 6px;
+      padding: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 11px;
+      line-height: 1.6;
+      font-family: monospace;
+    }
+
+    #log::-webkit-scrollbar { width: 4px; }
+    #log::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+    .log-entry { padding: 2px 0; border-bottom: 1px solid #1a1a2e; }
+    .log-ok { color: #4caf50; }
+    .log-err { color: #e74c3c; }
+    .log-info { color: #aaa; }
+    .log-warn { color: #ff9800; }
+
+    /* Секция вопроса */
+    #questionSection {
+      border: 2px solid #6c63ff;
+      border-radius: 8px;
+      padding: 12px;
+      animation: pulse-border 2s infinite;
+    }
+
+    @keyframes pulse-border {
+      0%, 100% { border-color: #6c63ff; box-shadow: 0 0 0 0 rgba(108, 99, 255, 0.4); }
+      50% { border-color: #ff9800; box-shadow: 0 0 8px 2px rgba(255, 152, 0, 0.3); }
+    }
+
+    #questionSection .q-title {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+
+    #questionSection .q-text {
+      color: #fff;
+      font-size: 13px;
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+
+    #questionSection textarea {
+      width: 100%;
+      background: #16213e;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #e0e0e0;
+      padding: 8px 10px;
+      font-size: 12px;
+      resize: none;
+      overflow: hidden;
+      min-height: 80px;
+      max-height: 300px;
+      outline: none;
+      font-family: inherit;
+      line-height: 1.5;
+    }
+
+    #questionSection textarea:focus { border-color: #6c63ff; }
+
+    .q-buttons {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .q-buttons button {
+      flex: 1;
+      padding: 8px 4px;
+      border: none;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .btn-user-answer { background: #4caf50; color: #fff; }
+    .btn-llm-answer { background: #6c63ff; color: #fff; }
+    .btn-suggested { background: #ff9800; color: #fff; }
+
+    .btn-skip-vacancy {
+      display: block;
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background: transparent;
+      color: #aaa;
+      font-size: 13px;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .btn-skip-vacancy:hover { color: #e74c3c; border-color: #e74c3c; }
+
+    .textarea-wrapper {
+      position: relative;
+    }
+    .btn-clear-textarea {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: none;
+      border: none;
+      color: #555;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 2px 5px;
+      line-height: 1;
+      transition: color 0.2s;
+    }
+    .btn-clear-textarea:hover { color: #e74c3c; }
+
+    .suggested-block {
+      background: #16213e;
+      border: 1px solid #ff9800;
+      border-radius: 4px;
+      padding: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+
+    .suggested-block .label { color: #ff9800; font-size: 11px; margin-bottom: 4px; }
+    .suggested-block .text { color: #e0e0e0; }
+
+    .radio-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 6px 8px;
+      background: #16213e;
+      border: 1px solid #333;
+      border-radius: 4px;
+      margin-bottom: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: border-color 0.2s;
+    }
+    .radio-option:hover { border-color: #6c63ff; }
+    .radio-option input[type="radio"] { margin-top: 2px; }
+    .radio-option.selected { border-color: #4caf50; background: rgba(76, 175, 80, 0.1); }
+    .radio-option.llm-recommended { border-color: #6c63ff; background: rgba(108, 99, 255, 0.1); }
+    .radio-option.llm-recommended::after { content: ' ← LLM'; color: #6c63ff; font-size: 10px; font-weight: 600; margin-left: auto; }
+    .radio-option.selected.llm-recommended { border-color: #4caf50; background: rgba(76, 175, 80, 0.1); }
+  </style>
+</head>
+<body>
+  <div style="display:flex; align-items:center; justify-content:center; margin-bottom:16px; position:relative;">
+    <h1 style="margin:0;">HH Auto Apply</h1>
+    <span id="btnGeneralSettings" class="settings-icon" title="Общие настройки" style="position:absolute; right:0; font-size:18px;">&#9881;</span>
+  </div>
+
+  <div class="section" id="generalSettingsPanel" style="display:none;">
+    <div class="general-settings-panel">
+      <div style="margin-bottom:8px;">
+        <label style="font-size:12px; color:#888; display:block; margin-bottom:4px;">Чёрный список (через запятую):</label>
+        <input type="text" id="blacklist" placeholder="1C, стажёр, intern" style="width:100%; background:#1a1a2e; border:1px solid #444; border-radius:4px; color:#e0e0e0; padding:6px 8px; font-size:12px; outline:none;">
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#888;">
+          <input type="checkbox" id="dbConfirm">
+          Подтверждать ответ из базы знаний
+        </label>
+      </div>
+      <div style="font-size:12px; color:#888;">
+        <div style="margin-bottom:4px;">При отсутствии ответа пользователя:</div>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-bottom:4px;">
+          <input type="radio" name="autoAction" id="autoActionNone" value="none" checked>
+          Ждать ответа пользователя
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-bottom:4px;">
+          <input type="radio" name="autoAction" id="autoActionLlm" value="llm">
+          Авто-ответ LLM
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-bottom:4px;">
+          <input type="radio" name="autoAction" id="autoActionSkip" value="skip">
+          Пропустить вакансию
+        </label>
+        <div id="autoActionSettings" style="display:none; margin-top:6px; padding-left:22px;">
+          <label style="display:flex; align-items:center; gap:6px;">
+            Таймаут:
+            <input type="number" id="autoActionTimeout" value="120" min="0" max="600" style="width:60px; background:#1a1a2e; border:1px solid #444; border-radius:4px; color:#e0e0e0; padding:4px 6px; font-size:12px; outline:none; text-align:center;">
+            сек
+          </label>
+          <div style="font-size:10px; color:#666; margin-top:4px;">0 = выполнить сразу без ожидания</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="drop-zone" id="dropZone">
+      Загрузить резюме (PDF)
+      <input type="file" id="fileInput" accept=".pdf" hidden>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+      <div class="file-name" id="fileName" style="margin:0; flex:1;"></div>
+      <button id="btnClearResume" style="display:none; background:none; border:none; color:#e74c3c; cursor:pointer; font-size:14px; padding:2px 5px; opacity:0.6; transition:opacity 0.2s;" title="Удалить резюме">&times;</button>
+    </div>
+  </div>
+
+  <div class="section settings">
+    <label>Провайдер:</label>
+    <select id="providerSelect" style="background:#16213e; border:1px solid #333; border-radius:4px; color:#e0e0e0; padding:6px 8px; font-size:12px; outline:none; flex:1;">
+      <option value="ollama">Ollama</option>
+      <option value="lmstudio">LM Studio</option>
+      <option value="openai">OpenAI</option>
+      <option value="claude">Claude</option>
+    </select>
+    <span id="btnProviderSettings" class="settings-icon" title="Настройки провайдера">&#9881;</span>
+  </div>
+
+  <div class="section" id="providerSettingsPanel" style="display:none;">
+    <div id="localProviderSection">
+      <div class="provider-settings" style="margin-bottom:6px;">
+        <label>URL:</label>
+        <input type="text" id="providerUrl" placeholder="localhost" style="flex:1; background:#16213e; border:1px solid #333; border-radius:4px; color:#e0e0e0; padding:6px 8px; font-size:12px; outline:none;">
+        <label style="margin-left:4px;">:</label>
+        <input type="number" id="providerPort" placeholder="11434" style="width:70px; background:#16213e; border:1px solid #333; border-radius:4px; color:#e0e0e0; padding:6px 8px; font-size:12px; outline:none; text-align:center;">
+      </div>
+    </div>
+    <div class="provider-settings" style="margin-bottom:6px;">
+      <label>Модель:</label>
+      <select id="modelSelect" style="flex:1; min-width:0; background:#16213e; border:1px solid #333; border-radius:4px; color:#e0e0e0; padding:6px 8px; font-size:12px; outline:none;">
+        <option value="">Загрузка...</option>
+      </select>
+      <span id="btnRefreshModels" class="settings-icon" title="Обновить список моделей">&#8635;</span>
+    </div>
+    <div id="apiKeySection" class="provider-settings" style="display:none;">
+      <label>API Key:</label>
+      <input type="password" id="apiKey" placeholder="sk-..." style="flex:1; background:#16213e; border:1px solid #333; border-radius:4px; color:#e0e0e0; padding:6px 8px; font-size:12px; outline:none;">
+    </div>
+  </div>
+
+  <div class="section" style="display: flex; gap: 8px;">
+    <button class="btn btn-start" id="btnStart" disabled style="flex:1">Запустить</button>
+    <button class="btn btn-stop" id="btnStop" disabled style="flex:1; display:none">Остановить</button>
+  </div>
+
+  <div class="section stats">
+    Отправлено: <span id="countSent">0</span> / Всего: <span id="countTotal">0</span>
+  </div>
+
+  <div class="section" id="questionSection" style="display:none;">
+    <div class="q-title">Вопрос работодателя — <span id="qVacancy"></span> (<span id="qIndex"></span>)</div>
+    <div class="q-text" id="qText"></div>
+    <div class="suggested-block" id="suggestedBlock" style="display:none;">
+      <div class="label">Найден ответ из базы:</div>
+      <div class="text" id="suggestedText"></div>
+    </div>
+    <div id="radioOptions" style="display:none; margin-bottom:8px;"></div>
+    <div class="textarea-wrapper">
+      <textarea id="userAnswer" placeholder="Введите ваш ответ..."></textarea>
+      <button class="btn-clear-textarea" id="btnClearAnswer" title="Очистить">&times;</button>
+    </div>
+    <div class="q-buttons">
+      <button class="btn-user-answer" id="btnUserAnswer">Отправить мой</button>
+      <button class="btn-suggested" id="btnUseSuggested" style="display:none">Из базы</button>
+      <button class="btn-llm-answer" id="btnLlmAnswer">LLM ответит</button>
+    </div>
+    <button class="btn-skip-vacancy" id="btnSkip">Пропустить вакансию</button>
+  </div>
+
+  <div class="section">
+    <div id="log"></div>
+  </div>
+
+  <div class="section">
+    <details>
+      <summary style="cursor:pointer; color:#888; font-size:12px;">База ответов</summary>
+      <div id="qaLog" style="background:#16213e; border-radius:6px; padding:8px; max-height:200px; overflow-y:auto; font-size:11px; line-height:1.6; font-family:monospace; margin-top:6px; color:#aaa;"></div>
+      <div style="display:flex; gap:6px; margin-top:6px;">
+        <button class="btn" id="btnDeduplicate" style="flex:1; background:#ff9800; color:#fff; font-size:12px; padding:6px;">Дедупликация</button>
+        <button class="btn" id="btnClearQA" style="flex:1; background:#e74c3c; color:#fff; font-size:12px; padding:6px;">Очистить всё</button>
+      </div>
+    </details>
+  </div>
+
+  <div class="section">
+    <details>
+      <summary style="cursor:pointer; color:#888; font-size:12px;">Debug: вопросы работодателей</summary>
+      <div id="debugLog" style="background:#16213e; border-radius:6px; padding:8px; max-height:200px; overflow-y:auto; font-size:11px; line-height:1.6; font-family:monospace; margin-top:6px; color:#aaa;"></div>
+    </details>
+  </div>
+
+  <script src="pdf.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
