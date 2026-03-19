@@ -50,7 +50,7 @@ Chrome-расширение для автоматической отправки
 
 1. Скачайте или клонируйте репозиторий:
    ```bash
-   git clone https://github.com/your-username/hh-auto-apply.git
+   git clone https://github.com/wyaredaze/hh-auto-apply.git
    ```
    или нажмите **Code → Download ZIP** и распакуйте архив
 2. Откройте в браузере `chrome://extensions/`
