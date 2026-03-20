@@ -18,6 +18,11 @@ function waitForUserAnswer(questionData) {
 
   // Таймаут 0 — выполнить сразу без паузы
   if (action !== 'none' && currentAutoTimeout === 0) {
+    // Если есть ответ из базы — используем его вместо LLM
+    if (action === 'llm' && questionData.suggestedAnswer && questionData.suggestedSource === 'db') {
+      forwardToPopup({ type: 'log', text: 'Авто-ответ из базы (без ожидания)', level: 'ok' });
+      return Promise.resolve({ source: 'suggested', answer: questionData.suggestedAnswer });
+    }
     forwardToPopup({ type: 'log', text: action === 'llm' ? 'Авто-ответ LLM (без ожидания)' : 'Авто-пропуск вакансии (без ожидания)', level: 'info' });
     return Promise.resolve({ source: action });
   }
@@ -41,10 +46,17 @@ function waitForUserAnswer(questionData) {
         clearInterval(keepalive);
         pendingQuestionResolve = null;
         currentPendingQuestion = null;
-        const label = action === 'llm' ? 'Авто-ответ LLM' : 'Авто-пропуск вакансии';
-        forwardToPopup({ type: 'log', text: `${label} (таймаут ${currentAutoTimeout}с)`, level: 'info' });
-        forwardToPopup({ type: 'question-done' });
-        resolve({ source: action });
+        // Если есть ответ из базы — используем его вместо LLM
+        if (action === 'llm' && questionData.suggestedAnswer && questionData.suggestedSource === 'db') {
+          forwardToPopup({ type: 'log', text: `Авто-ответ из базы (таймаут ${currentAutoTimeout}с)`, level: 'ok' });
+          forwardToPopup({ type: 'question-done' });
+          resolve({ source: 'suggested', answer: questionData.suggestedAnswer });
+        } else {
+          const label = action === 'llm' ? 'Авто-ответ LLM' : 'Авто-пропуск вакансии';
+          forwardToPopup({ type: 'log', text: `${label} (таймаут ${currentAutoTimeout}с)`, level: 'info' });
+          forwardToPopup({ type: 'question-done' });
+          resolve({ source: action });
+        }
       }, timeoutMs);
     }
 
