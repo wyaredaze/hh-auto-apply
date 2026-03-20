@@ -2,8 +2,8 @@
 // Навигацией и Ollama управляет background.js.
 
 (() => {
-  if (window.__hhAutoApplyLoaded) return;
-  window.__hhAutoApplyLoaded = true;
+  if (window.__hhAiApplyLoaded) return;
+  window.__hhAiApplyLoaded = true;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;

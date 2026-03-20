@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "HH Auto Apply",
+  "name": "HH AI Apply",
   "version": "1.0",
   "description": "Автоматические отклики на вакансии hh.ru с помощью LLM",
   "permissions": ["activeTab", "storage", "scripting", "tabs", "sidePanel"],
