@@ -604,7 +604,7 @@ ${vacancyInfo.description}`, model, provider);
               const prompt = `Ты — кандидат, который отвечает на вопрос работодателя при отклике на вакансию.
 
 Упоминай только опыт и технологии из резюме. Если технологии нет в резюме — скажи честно и упомяни похожий опыт или готовность разобраться.
-
+Организационные вопросы (готовность к переезду, формат работы, самозанятость, зарплата) — отвечай коротко "Да/Нет", без выдумывания опыта.
 Теоретические вопросы ("Что такое X?", "Как работает Y?") — отвечай развёрнуто как специалист (3-5 предложений).
 
 Плохо: "Имею 7 лет коммерческого опыта в разработке backend-систем на PHP"
@@ -620,6 +620,9 @@ ${vacancyInfo.description}`, model, provider);
 
 В: "Знаете Flutter?"
 О: С Flutter не работал, но писал API для мобильных приложений — думаю, разберусь быстро.
+
+В: "Готовы оформиться как самозанятый/ИП?"
+О: Да, готов.
 
 В: "Что такое индекс в БД?"
 О: Индекс — структура данных, которая ускоряет поиск по таблице, примерно как алфавитный указатель в книге. Бывают B-tree, hash, GIN, GiST — каждый под свои задачи. B-tree подходит для сортировок и диапазонов, GIN — для полнотекстового поиска и jsonb. Минус — индексы замедляют запись и занимают место, поэтому создавать их нужно по реальным запросам.
@@ -674,20 +677,49 @@ ${qText}`;
       }
 
       const matches = findMatches(resumeText, vacancyInfo.description || '');
-      const matchesHint = matches.length > 0
-        ? `\nСОВПАДЕНИЯ между резюме и вакансией (используй ИХ в первую очередь): ${matches.join(', ')}\n`
-        : '\nСовпадений по ключевым словам не найдено — покажи общий релевантный опыт.\n';
       forwardToPopup({ type: 'log', text: `Матчинг: ${matches.length} совпадений`, level: 'info' });
       forwardToPopup({ type: 'debug-vacancy', title: `Матчинг: ${vacancyInfo.title}`, text: matches.length > 0 ? matches.join(', ') : 'совпадений не найдено' });
 
-      const coverLetterPrompt = `Напиши короткий отклик на вакансию от лица разработчика. Стиль — как сообщение коллеге, не как официальное письмо.
-${matchesHint}
+      // Шаг 1: LLM выбирает релевантные факты из резюме для этой вакансии
+      forwardToPopup({ type: 'log', text: 'Подбираю релевантные факты...', level: 'info' });
+      let relevantFacts = '';
+      try {
+        relevantFacts = await askLLM(`Из резюме выбери 2-3 факта, НАИБОЛЕЕ релевантных для вакансии.
 
 Правила:
-- Бери факты только из резюме. Не упоминай технологии, которых нет в резюме. Не приписывай роли, которых не было.
-- Строй письмо вокруг СОВПАДЕНИЙ (см. выше). Упомяни как можно больше из них. Не заменяй совпадения другими фактами из резюме.
-- Бери факты из РАЗНЫХ мест работы, не только из последнего.
-- Если совпадений нет или главный стек вакансии отсутствует в резюме — честно скажи что опыта с ним нет, но покажи похожий опыт и готовность освоить.
+- Указывай только навыки, которые ЯВНО перечислены в резюме для КОНКРЕТНОЙ компании. Не приписывай навыки из вакансии к компаниям.
+- Выбирай компании, где навыки из вакансии РЕАЛЬНО использовались.
+- Если главный навык вакансии отсутствует во ВСЁМ резюме — напиши об этом.
+
+Формат каждого факта: "Компания: что делал. Навыки: только те что в резюме для этой компании."
+Верни ТОЛЬКО факты, без пояснений.
+
+ВАКАНСИЯ:
+${vacancyInfo.title}${vacancyInfo.company ? ' в ' + vacancyInfo.company : ''}
+${vacancyInfo.description}
+
+РЕЗЮМЕ:
+${resumeText}`, model, provider);
+        forwardToPopup({ type: 'log', text: 'Факты подобраны', level: 'ok' });
+        forwardToPopup({ type: 'debug-vacancy', title: `Факты: ${vacancyInfo.title}`, text: relevantFacts });
+      } catch (e) {
+        forwardToPopup({ type: 'log', text: `Ошибка подбора фактов: ${e.message}`, level: 'warn' });
+      }
+
+      // Шаг 2: генерация письма на основе подобранных фактов
+      const matchesHint = matches.length > 0
+        ? `\nСОВПАДЕНИЯ навыков: ${matches.join(', ')}\n`
+        : '';
+      const factsHint = relevantFacts
+        ? `\nРЕЛЕВАНТНЫЕ ФАКТЫ из резюме (используй ИХ, не ищи другие):\n${relevantFacts}\n`
+        : '';
+
+      const coverLetterPrompt = `Напиши короткий отклик на вакансию от лица кандидата. Стиль — как сообщение коллеге, не как официальное письмо.
+${factsHint}${matchesHint}
+Правила:
+- Строй письмо ТОЛЬКО на основе РЕЛЕВАНТНЫХ ФАКТОВ выше. Не добавляй другие факты из резюме.
+- Не упоминай навыки/технологии, которых нет в резюме. Не приписывай роли, которых не было.
+- Если в фактах сказано что навыка нет — честно скажи об этом и покажи готовность освоить.
 - Не комментируй вакансию ("интересное направление", "задачи выглядят интересными").
 - Короткие предложения. Без канцелярита.
 
@@ -728,7 +760,7 @@ anna.k@yandex.ru
 telegram: @sergey_go
 sergey@mail.ru
 
-ВАКАНСИЯ: ${vacancyInfo.title}${vacancyInfo.company ? ' в ' + vacancyInfo.company : ''}
+ВАКАНСИЯ:
 ${vacancyInfo.description}
 
 РЕЗЮМЕ:
@@ -798,14 +830,14 @@ const PROVIDER_CONFIG = {
   ollama: {
     name: 'Ollama',
     getUrl: (baseUrl) => `${baseUrl || 'http://localhost:11434'}/api/generate`,
-    buildBody: (model, prompt) => ({ model, prompt, stream: true, think: false }),
+    buildBody: (model, prompt) => ({ model, prompt, stream: true, think: false, context: [] }),
     readStream: 'ollama',
     needsKey: false
   },
   lmstudio: {
     name: 'LM Studio',
     getUrl: (baseUrl) => `${baseUrl || 'http://localhost:1234'}/v1/chat/completions`,
-    buildBody: (model, prompt) => ({ model, messages: [{ role: 'user', content: prompt }], stream: true }),
+    buildBody: (model, prompt) => ({ model, messages: [{ role: 'user', content: '/no_think\n' + prompt }], stream: true, stream_options: { include_usage: true }, cache_prompt: false }),
     readStream: 'sse',
     needsKey: false
   },
@@ -843,19 +875,25 @@ async function askLLM(prompt, model, provider = 'ollama', retries = 3) {
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     let resp;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000); // 2 минуты
     try {
       resp = await fetch(cfg.getUrl(currentBaseUrl), {
         method: 'POST',
         headers,
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        signal: controller.signal
       });
+      clearTimeout(timeout);
     } catch (e) {
+      clearTimeout(timeout);
+      const errMsg = e.name === 'AbortError' ? 'таймаут 120с' : e.message;
       if (attempt < retries) {
-        forwardToPopup({ type: 'log', text: `${cfg.name} сетевая ошибка: ${e.message}, повтор ${attempt}/${retries}...`, level: 'warn' });
+        forwardToPopup({ type: 'log', text: `${cfg.name} ошибка: ${errMsg}, повтор ${attempt}/${retries}...`, level: 'warn' });
         await new Promise(r => setTimeout(r, 2000 * attempt));
         continue;
       }
-      throw new Error(`${cfg.name} недоступна: ${e.message}`);
+      throw new Error(`${cfg.name} недоступна: ${errMsg}`);
     }
     if (resp.status >= 500) {
       console.warn(`[askLLM] ${cfg.name} HTTP ${resp.status}, attempt ${attempt}/${retries}`);
@@ -877,7 +915,16 @@ async function askLLM(prompt, model, provider = 'ollama', retries = 3) {
     else if (cfg.readStream === 'claude') raw = await readStreamClaude(resp);
     else raw = await readStreamSSE(resp);
 
-    return raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    const text = (raw.text || raw)
+      .replace(/<think>[\s\S]*?<\/think>/g, '')   // полные <think>...</think>
+      .replace(/^[\s\S]*?<\/think>/g, '')          // обрезанный </think> в начале
+      .replace(/<think>[\s\S]*$/g, '')             // незакрытый <think> в конце
+      .trim();
+    const usage = raw.usage || null;
+    if (usage) {
+      forwardToPopup({ type: 'debug-tokens', prompt_tokens: usage.prompt_tokens || 0, completion_tokens: usage.completion_tokens || 0, total_tokens: usage.total_tokens || 0 });
+    }
+    return text;
   }
 }
 
@@ -886,6 +933,7 @@ async function readStreamOllama(resp) {
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let result = '';
+  let usage = null;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -895,10 +943,13 @@ async function readStreamOllama(resp) {
       try {
         const obj = JSON.parse(line);
         if (obj.response) result += obj.response;
+        if (obj.done && obj.prompt_eval_count) {
+          usage = { prompt_tokens: obj.prompt_eval_count || 0, completion_tokens: obj.eval_count || 0, total_tokens: (obj.prompt_eval_count || 0) + (obj.eval_count || 0) };
+        }
       } catch {}
     }
   }
-  return result;
+  return { text: result, usage };
 }
 
 // Чтение SSE streaming (OpenAI-совместимый: LM Studio, OpenAI)
@@ -907,6 +958,7 @@ async function readStreamSSE(resp) {
   const decoder = new TextDecoder();
   let result = '';
   let buffer = '';
+  let usage = null;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -916,15 +968,16 @@ async function readStreamSSE(resp) {
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;
       const data = line.slice(6).trim();
-      if (data === '[DONE]') return result;
+      if (data === '[DONE]') return { text: result, usage };
       try {
         const obj = JSON.parse(data);
         const content = obj.choices?.[0]?.delta?.content;
         if (content) result += content;
+        if (obj.usage) usage = { prompt_tokens: obj.usage.prompt_tokens || 0, completion_tokens: obj.usage.completion_tokens || 0, total_tokens: obj.usage.total_tokens || 0 };
       } catch {}
     }
   }
-  return result;
+  return { text: result, usage };
 }
 
 // Чтение SSE streaming от Claude API
@@ -933,6 +986,7 @@ async function readStreamClaude(resp) {
   const decoder = new TextDecoder();
   let result = '';
   let buffer = '';
+  let usage = null;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -947,10 +1001,16 @@ async function readStreamClaude(resp) {
         if (obj.type === 'content_block_delta' && obj.delta?.text) {
           result += obj.delta.text;
         }
+        if (obj.type === 'message_delta' && obj.usage) {
+          usage = { prompt_tokens: usage?.prompt_tokens || 0, completion_tokens: obj.usage.output_tokens || 0, total_tokens: (usage?.prompt_tokens || 0) + (obj.usage.output_tokens || 0) };
+        }
+        if (obj.type === 'message_start' && obj.message?.usage) {
+          usage = { prompt_tokens: obj.message.usage.input_tokens || 0, completion_tokens: 0, total_tokens: obj.message.usage.input_tokens || 0 };
+        }
       } catch {}
     }
   }
-  return result;
+  return { text: result, usage };
 }
 
 // --- Открытие side panel по клику на иконку ---
@@ -993,29 +1053,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const { resumeText, model, provider, apiKey, baseUrl } = msg;
     currentApiKey = apiKey || '';
     currentBaseUrl = baseUrl || '';
-    const prompt = `Сожми резюме в максимально короткий plain text. Без markdown, без звёздочек, без буллетов.
+    const prompt = `Преобразуй резюме в JSON. Верни ТОЛЬКО валидный JSON, без пояснений и markdown.
 
-Сохрани:
-1. ФИО, возраст, город, гражданство, контакты (сохрани оригинальный формат: телефон с пробелами, telegram: с префиксом), формат работы, желаемую должность — одной строкой
-2. Каждое место работы одной строкой: компания (период), должность — 1-2 главных достижения с цифрами
-3. Полный список технологий через запятую
-4. Образование, языки
-5. Раздел "обо мне" — сожми до 1-2 предложений
+Формат:
+{"name":"ФИО","age":"24","city":"город","citizenship":"гражданство","contacts":{"phone":"+7 (991) 1131394","email":"x@y.ru","telegram":"telegram: @name"},"desired_position":"должность","work_format":"удалённо","jobs":[{"company":"Компания","period":"2022-2024","role":"должность","achievements":"1-2 достижения с цифрами"}],"all_skills":["навык1","навык2"],"education":"образование","languages":"русский, английский B1","summary":"1-2 предложения"}
 
-Убери повторы и воду. Описание каждой работы — максимум 1-2 предложения, только ключевые достижения.
-
-Пример формата:
-Иванов Иван, 30 лет, Москва, РФ, +7 (999) 123-45-67, ivan@mail.ru, telegram: @ivan, удалённо/гибрид, Backend developer.
-Компания А (2022-2024), Backend — оптимизировал API до 50k RPS, внедрил Kafka.
-Компания Б (2020-2022), Backend — разработал микросервисную платформу.
-Технологии: Go, PHP, PostgreSQL, Redis, Kafka, Docker, Kubernetes.
-Образование: высшее. Языки: русский, английский B1.
-7 лет в backend, специализация на highload в fintech и e-commerce.
+Правила:
+- jobs — массив объектов БЕЗ поля skills, только company/period/role/achievements
+- achievements — строка, не массив. Кратко, 1-2 предложения
+- all_skills — ПОЛНЫЙ список ВСЕХ навыков/технологий/инструментов из резюме БЕЗ ДУБЛИКАТОВ. Собери навыки из всех мест работы и раздела "Навыки", убери повторы. Не переводи на другой язык — копируй как есть
+- summary — максимум 1-2 предложения
+- Контакты: копируй ВСЕ контакты ТОЧНО как в резюме, не меняй формат
 
 РЕЗЮМЕ:
 ${resumeText}`;
-    askLLM(prompt, model, provider).then(compressed => {
-      sendResponse({ ok: true, compressed });
+    askLLM(prompt, model, provider).then(result => {
+      // Пытаемся распарсить JSON
+      try {
+        const jsonMatch = result.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          sendResponse({ ok: true, compressed: JSON.stringify(parsed), structured: parsed });
+        } else {
+          sendResponse({ ok: true, compressed: result });
+        }
+      } catch (e) {
+        // Если JSON не парсится — используем как plain text
+        sendResponse({ ok: true, compressed: result });
+      }
     }).catch(e => {
       sendResponse({ ok: false, error: e.message });
     });

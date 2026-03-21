@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>HH AI Apply — Тест промптов</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a1a; color: #e0e0e0; padding: 20px; }
+  h1 { font-size: 18px; margin-bottom: 16px; color: #6c63ff; }
+  .row { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+  .col { flex: 1; min-width: 300px; }
+  label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
+  textarea { width: 100%; background: #16213e; color: #e0e0e0; border: 1px solid #2a2a4a; border-radius: 8px; padding: 10px; font-size: 13px; font-family: monospace; resize: vertical; }
+  input, select { background: #16213e; color: #e0e0e0; border: 1px solid #2a2a4a; border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  .btn { background: #6c63ff; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; cursor: pointer; font-size: 14px; font-weight: 600; }
+  .btn:hover { background: #5a52e0; }
+  .btn:disabled { background: #444; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  .result { background: #16213e; border-radius: 8px; padding: 12px; margin-top: 8px; white-space: pre-wrap; font-size: 13px; line-height: 1.6; font-family: monospace; min-height: 60px; }
+  .result-label { font-size: 12px; color: #6c63ff; font-weight: bold; margin-top: 16px; margin-bottom: 4px; }
+  .stats { color: #888; font-size: 11px; margin-top: 4px; }
+  .section { background: #111; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .section-title { font-size: 14px; color: #fff; margin-bottom: 12px; font-weight: 600; }
+  .log { background: #0a0a1a; border: 1px solid #2a2a4a; border-radius: 6px; padding: 8px; font-size: 11px; font-family: monospace; max-height: 150px; overflow-y: auto; margin-top: 8px; color: #888; }
+  .log-entry { padding: 1px 0; }
+  .log-ok { color: #4caf50; }
+  .log-err { color: #e74c3c; }
+  .log-warn { color: #ff9800; }
+  .log-info { color: #aaa; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #6c63ff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 6px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  hr { border: none; border-top: 1px solid #2a2a4a; margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<h1>HH AI Apply — Тест промптов</h1>
+
+<div class="section">
+  <div class="section-title">Настройки LLM</div>
+  <div class="row">
+    <div class="col" style="min-width:150px; flex:0.3">
+      <label>Провайдер</label>
+      <select id="provider" style="width:100%" onchange="onProviderChange()">
+        <option value="ollama">Ollama</option>
+        <option value="lmstudio">LM Studio</option>
+        <option value="openai">OpenAI</option>
+      </select>
+    </div>
+    <div class="col" style="min-width:100px; flex:0.2">
+      <label>Хост</label>
+      <input id="host" value="localhost" style="width:100%">
+    </div>
+    <div class="col" style="min-width:80px; flex:0.15">
+      <label>Порт</label>
+      <input id="port" value="11434" style="width:100%">
+    </div>
+    <div class="col" style="min-width:200px; flex:0.35">
+      <label>Модель <button onclick="fetchModels()" style="background:#333;color:#aaa;border:1px solid #555;border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;margin-left:4px;">обновить</button></label>
+      <select id="model" style="width:100%">
+        <option value="">загрузка...</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Входные данные</div>
+  <div class="row">
+    <div class="col">
+      <label>Резюме (plain text или JSON)</label>
+      <textarea id="resume" rows="12" placeholder="Вставьте текст резюме..."></textarea>
+    </div>
+    <div class="col">
+      <label>Описание вакансии</label>
+      <textarea id="vacancy" rows="12" placeholder="Вставьте описание вакансии..."></textarea>
+    </div>
+  </div>
+  <label>Вопросы работодателя (каждый с новой строки, можно оставить пустым)</label>
+  <textarea id="questions" rows="3" placeholder="Вы готовы к переезду?&#10;Опыт с Docker?&#10;Что такое SOLID?"></textarea>
+</div>
+
+<div class="btn-row">
+  <button class="btn" id="btnRunAll" onclick="runAll()">Запустить все тесты</button>
+  <button class="btn" id="btnCompress" onclick="runCompress()" style="background:#2a6">Сжать резюме</button>
+  <button class="btn" id="btnCompressVac" onclick="runCompressVacancy()" style="background:#2a6">Сжать вакансию</button>
+  <button class="btn" id="btnFacts" onclick="runFacts()" style="background:#e90">Подобрать факты</button>
+  <button class="btn" id="btnLetter" onclick="runLetter()" style="background:#c36">Письмо</button>
+  <button class="btn" id="btnAnswers" onclick="runAnswers()" style="background:#39c">Ответы</button>
+  <button class="btn" onclick="copyAll()" style="background:#555">Скопировать всё</button>
+</div>
+
+<div id="logSection">
+  <label>Лог</label>
+  <div class="log" id="log"></div>
+</div>
+
+<hr>
+
+<div id="results"></div>
+
+<script>
+// --- Сохранение/восстановление полей ---
+const SAVE_FIELDS = ['provider', 'host', 'port', 'model', 'resume', 'vacancy', 'questions'];
+
+function saveFields() {
+  const data = {};
+  for (const id of SAVE_FIELDS) data[id] = document.getElementById(id).value;
+  localStorage.setItem('hh-test-fields', JSON.stringify(data));
+}
+
+function loadFields() {
+  try {
+    const data = JSON.parse(localStorage.getItem('hh-test-fields'));
+    if (!data) return;
+    for (const id of SAVE_FIELDS) {
+      if (data[id] !== undefined) document.getElementById(id).value = data[id];
+    }
+  } catch {}
+}
+
+const DEFAULT_PORTS = { ollama: '11434', lmstudio: '1234', openai: '' };
+
+function onProviderChange() {
+  const provider = document.getElementById('provider').value;
+  document.getElementById('port').value = DEFAULT_PORTS[provider] || '11434';
+  saveFields();
+  fetchModels();
+}
+
+async function fetchModels() {
+  const provider = document.getElementById('provider').value;
+  const host = document.getElementById('host').value || 'localhost';
+  const port = document.getElementById('port').value;
+  const modelSelect = document.getElementById('model');
+  const savedModel = modelSelect.value;
+
+  let url;
+  if (provider === 'ollama') {
+    url = `http://${host}:${port}/api/tags`;
+  } else {
+    url = `http://${host}:${port}/v1/models`;
+  }
+
+  modelSelect.innerHTML = '<option value="">загрузка...</option>';
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    let models = [];
+    if (provider === 'ollama') {
+      models = (data.models || []).map(m => m.name);
+    } else {
+      models = (data.data || []).map(m => m.id);
+    }
+    modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+    if (models.includes(savedModel)) modelSelect.value = savedModel;
+    else if (models.length > 0) modelSelect.value = models[0];
+    saveFields();
+    log(`Найдено ${models.length} моделей`, 'ok');
+  } catch (e) {
+    modelSelect.innerHTML = '<option value="">ошибка загрузки</option>';
+    log(`Не удалось загрузить модели: ${e.message}`, 'err');
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  loadFields();
+  fetchModels();
+});
+for (const id of SAVE_FIELDS) {
+  document.getElementById(id)?.addEventListener('input', saveFields);
+  document.getElementById(id)?.addEventListener('change', saveFields);
+}
+
+// --- LLM API ---
+async function askLLM(prompt) {
+  const provider = document.getElementById('provider').value;
+  const host = document.getElementById('host').value || 'localhost';
+  const port = document.getElementById('port').value || '1234';
+  const model = document.getElementById('model').value || 'qwen3-14b';
+  const baseUrl = `http://${host}:${port}`;
+
+  let url, body, headers = { 'Content-Type': 'application/json' };
+
+  if (provider === 'ollama') {
+    url = `${baseUrl}/api/generate`;
+    body = { model, prompt, stream: false, think: false, context: [] };
+  } else {
+    url = `${baseUrl}/v1/chat/completions`;
+    body = { model, messages: [{ role: 'user', content: '/no_think\n' + prompt }], stream: false, stream_options: { include_usage: true } };
+  }
+
+  const start = performance.now();
+  const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+  const data = await resp.json();
+  const elapsed = ((performance.now() - start) / 1000).toFixed(1);
+
+  let text, usage;
+  if (provider === 'ollama') {
+    text = data.response || '';
+    usage = { prompt_tokens: data.prompt_eval_count || 0, completion_tokens: data.eval_count || 0 };
+  } else {
+    text = data.choices?.[0]?.message?.content || '';
+    usage = data.usage || {};
+  }
+
+  text = text.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/^[\s\S]*?<\/think>/g, '').replace(/<think>[\s\S]*$/g, '').trim();
+  usage.total_tokens = (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
+
+  return { text, usage, elapsed };
+}
+
+// --- Матчинг (копия из background.js) ---
+function findMatches(resumeText, vacancyText) {
+  const STOP_WORDS = new Set([
+    'и', 'в', 'на', 'с', 'по', 'для', 'от', 'из', 'до', 'не', 'за', 'что', 'как', 'или',
+    'это', 'так', 'все', 'при', 'уже', 'его', 'мы', 'вы', 'они', 'она', 'он', 'быть',
+    'также', 'более', 'будет', 'есть', 'было', 'были', 'был', 'может', 'нет', 'между',
+    'через', 'после', 'перед', 'под', 'над', 'без', 'про', 'обо', 'около',
+    'опыт', 'работа', 'работы', 'знание', 'знания', 'умение', 'навыки', 'навык',
+    'года', 'лет', 'год', 'месяцев', 'понимание', 'использование', 'владение',
+    'the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'was', 'will', 'has', 'have',
+    'experience', 'years', 'work', 'working', 'knowledge', 'skills', 'using', 'ability'
+  ]);
+  function extractWords(text) {
+    return text.toLowerCase().replace(/[()\/\\\[\]{}<>|,;:!?"""''«»—–\-\.]/g, ' ').split(/\s+/).filter(w => w.length >= 2 && !STOP_WORDS.has(w));
+  }
+  function extractBigrams(text) {
+    const words = extractWords(text);
+    const bigrams = [];
+    for (let i = 0; i < words.length - 1; i++) bigrams.push(words[i] + ' ' + words[i + 1]);
+    return bigrams;
+  }
+  const resumeWords = new Set(extractWords(resumeText));
+  const vacancyWords = extractWords(vacancyText);
+  const resumeBigrams = new Set(extractBigrams(resumeText));
+  const vacancyBigrams = extractBigrams(vacancyText);
+  const matches = new Set();
+  for (const bg of vacancyBigrams) { if (resumeBigrams.has(bg)) matches.add(bg); }
+  for (const w of vacancyWords) { if (resumeWords.has(w)) matches.add(w); }
+  return [...matches];
+}
+
+// --- Логирование ---
+function log(text, type = 'info') {
+  const el = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = `log-entry log-${type}`;
+  div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function addResult(label, text, usage, elapsed, context) {
+  const el = document.getElementById('results');
+  const id = 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  const stats = usage ? `prompt: ${usage.prompt_tokens} + completion: ${usage.completion_tokens} = ${usage.total_tokens} токенов | ${elapsed}с` : '';
+
+  // Сохраняем данные для копирования
+  window._resultData = window._resultData || {};
+  window._resultData[id] = { label, text, stats, context: context || {} };
+
+  el.innerHTML += `<div class="result-label">${label} <button onclick="copyResult('${id}')" style="background:#333;color:#aaa;border:1px solid #555;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;margin-left:8px;">копировать</button></div><div class="result">${text}</div>${stats ? `<div class="stats">${stats}</div>` : ''}`;
+}
+
+function copyResult(id) {
+  const d = window._resultData[id];
+  if (!d) return;
+  let out = `=== ${d.label} ===\n${d.text}\n`;
+  if (d.stats) out += `${d.stats}\n`;
+  if (d.context.resume) out += `\n--- Резюме (вход) ---\n${d.context.resume}\n`;
+  if (d.context.vacancy) out += `\n--- Вакансия (вход) ---\n${d.context.vacancy}\n`;
+  if (d.context.question) out += `\n--- Вопрос ---\n${d.context.question}\n`;
+  if (d.context.facts) out += `\n--- Факты ---\n${d.context.facts}\n`;
+  if (d.context.matches) out += `\n--- Матчинг ---\n${d.context.matches}\n`;
+  navigator.clipboard.writeText(out).then(() => {
+    const btn = event.target;
+    btn.textContent = 'скопировано!';
+    setTimeout(() => btn.textContent = 'копировать', 1500);
+  });
+}
+
+function copyAll() {
+  if (!window._resultData) return;
+  const resume = document.getElementById('resume').value;
+  const vacancy = document.getElementById('vacancy').value;
+  const questions = document.getElementById('questions').value;
+  let out = '';
+  if (resume) out += `--- Резюме ---\n${resume}\n\n`;
+  if (vacancy) out += `--- Вакансия ---\n${vacancy}\n\n`;
+  if (questions) out += `--- Вопросы ---\n${questions}\n\n`;
+  for (const id of Object.keys(window._resultData)) {
+    const d = window._resultData[id];
+    out += `=== ${d.label} ===\n${d.text}\n`;
+    if (d.stats) out += `${d.stats}\n`;
+    out += '\n';
+  }
+  navigator.clipboard.writeText(out).then(() => {
+    const btn = event.target;
+    btn.textContent = 'Скопировано!';
+    setTimeout(() => btn.textContent = 'Скопировать всё', 1500);
+  });
+}
+
+function clearResults() {
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('log').innerHTML = '';
+}
+
+// --- Промпты (копии из background.js) ---
+function getResumeCompressPrompt(resumeText) {
+  return `Преобразуй резюме в JSON. Верни ТОЛЬКО валидный JSON, без пояснений и markdown.
+
+Формат:
+{"name":"ФИО","age":"24","city":"город","citizenship":"гражданство","contacts":{"phone":"+7 (991) 1131394","email":"x@y.ru","telegram":"telegram: @name"},"desired_position":"должность","work_format":"удалённо","jobs":[{"company":"Компания","period":"2022-2024","role":"должность","achievements":"1-2 достижения с цифрами","skills":"PHP, Go, Redis"}],"all_skills":["навык1","навык2"],"education":"образование","languages":"русский, английский B1","summary":"1-2 предложения"}
+
+Правила:
+- jobs.skills — СТРОКА (не массив), перечисли через запятую навыки/технологии, которые использовались ИМЕННО в этой компании
+- achievements — строка, не массив. Кратко, 1-2 предложения
+- all_skills — ПОЛНЫЙ список ВСЕХ навыков/технологий/инструментов из резюме БЕЗ ДУБЛИКАТОВ. Собери навыки из всех мест работы и раздела "Навыки", убери повторы. Не переводи на другой язык — копируй как есть
+- summary — максимум 1-2 предложения
+- Контакты: копируй телефон ТОЧНО как в резюме (с пробелами и скобками), telegram с префиксом "telegram:"
+
+РЕЗЮМЕ:
+${resumeText}`;
+}
+
+function getVacancyCompressPrompt(vacancyDesc) {
+  return `Сожми описание вакансии в короткий plain text. Без markdown. Каждый раздел с новой строки.
+
+Формат:
+Позиция: [название]
+Задачи: [все обязанности через запятую]
+Требования: [языки, технологии, опыт, навыки — через запятую]
+Плюсом: [если есть — через запятую]
+
+Убери: описание компании, условия работы, бенефиты, воду.
+
+ВАКАНСИЯ:
+${vacancyDesc}`;
+}
+
+function getFactsPrompt(resumeText, vacancyTitle, vacancyDesc) {
+  return `Из резюме выбери 2-3 факта, НАИБОЛЕЕ релевантных для вакансии.
+
+Правила:
+- Указывай только навыки, которые ЯВНО перечислены в резюме для КОНКРЕТНОЙ компании. Не приписывай навыки из вакансии к компаниям.
+- Выбирай компании, где навыки из вакансии РЕАЛЬНО использовались.
+- Если главный навык вакансии отсутствует во ВСЁМ резюме — напиши об этом.
+
+Формат каждого факта: "Компания: что делал. Навыки: только те что в резюме для этой компании."
+Верни ТОЛЬКО факты, без пояснений.
+
+ВАКАНСИЯ:
+${vacancyTitle}
+${vacancyDesc}
+
+РЕЗЮМЕ:
+${resumeText}`;
+}
+
+function getCoverLetterPrompt(resumeText, vacancy, relevantFacts, matches) {
+  const matchesHint = matches.length > 0 ? `\nСОВПАДЕНИЯ навыков: ${matches.join(', ')}\n` : '';
+  const factsHint = relevantFacts ? `\nРЕЛЕВАНТНЫЕ ФАКТЫ из резюме (используй ИХ, не ищи другие):\n${relevantFacts}\n` : '';
+
+  return `Напиши короткий отклик на вакансию от лица кандидата. Стиль — как сообщение коллеге, не как официальное письмо.
+${factsHint}${matchesHint}
+Правила:
+- Строй письмо ТОЛЬКО на основе РЕЛЕВАНТНЫХ ФАКТОВ выше. Не добавляй другие факты из резюме.
+- Не упоминай навыки/технологии, которых нет в резюме. Не приписывай роли, которых не было.
+- Если в фактах сказано что навыка нет — честно скажи об этом и покажи готовность освоить.
+- Не комментируй вакансию ("интересное направление", "задачи выглядят интересными").
+- Короткие предложения. Без канцелярита.
+
+Не используй фразы: "Имею X лет опыта", "Меня заинтересовала позиция", "коммерческий опыт", "Обладаю навыками", "Готов обсудить детали", "Готов рассказать подробнее", "интересное направление", "выглядят интересными".
+
+Напиши ОДИН отклик. Выбери один из подходов к началу:
+- С конкретной задачи из вакансии
+- С достижения на прошлом месте
+- С совпадения по стеку или нише
+
+Выведи только текст письма и контакты, без заголовков, вариантов и пояснений.
+
+Формат:
+- Начни с приветствия (Приветствую! / Добрый день! / Здравствуйте!)
+- 2-3 предложения
+- Призыв к сотрудничеству (например: "Буду рад пообщаться!", "Напишите, обсудим!", "С удовольствием расскажу подробнее!")
+- Пустая строка
+- Контакты из резюме (каждый с новой строки, без заголовка)
+
+Примеры:
+
+Приветствую!
+Вам нужен Go-разработчик с опытом в микросервисах — в Zaymigo я проектировал микросервисную архитектуру и настраивал инфраструктуру на Kubernetes с Helm. Kafka и PostgreSQL тоже в моём стеке. Буду рад пообщаться!
+
++7 (912) 3456789
+ivan.dev@gmail.com
+telegram: @ivandev
+
+Добрый день!
+Вижу, что нужен человек для интеграций с внешними сервисами — в Code Pilots я интегрировал платёжные системы и сторонние API, а в Zaymigo разрабатывал API для мобильного приложения. Напишите, обсудим!
+
+anna.k@yandex.ru
++7 (903) 7654321
+
+Здравствуйте!
+В описании вакансии акцент на PHP и проектирование архитектуры — работаю с PHP 7 лет, на Symfony и Laravel, в последнем проекте проектировал DDD/CQRS архитектуру. С удовольствием расскажу подробнее!
+
+telegram: @sergey_go
+sergey@mail.ru
+
+ВАКАНСИЯ:
+${vacancy}
+
+РЕЗЮМЕ:
+${resumeText}`;
+}
+
+function getAnswerPrompt(resumeText, question) {
+  return `Ты — кандидат, который отвечает на вопрос работодателя при отклике на вакансию.
+
+Упоминай только опыт и технологии из резюме. Если технологии нет в резюме — скажи честно и упомяни похожий опыт или готовность разобраться.
+Организационные вопросы (готовность к переезду, формат работы, самозанятость, зарплата) — отвечай коротко "Да/Нет", без выдумывания опыта.
+Теоретические вопросы ("Что такое X?", "Как работает Y?") — отвечай развёрнуто как специалист (3-5 предложений).
+
+Плохо: "Имею 7 лет коммерческого опыта в разработке backend-систем на PHP"
+Хорошо: "7 лет пишу на PHP, последние 3 — Symfony на highload"
+
+Плохо: "Обладаю обширным опытом работы с реляционными СУБД"
+Хорошо: "Работаю с PostgreSQL каждый день, в прошлом проекте оптимизировал тяжёлые запросы через explain analyze"
+
+Примеры ответов:
+
+В: "Опыт с Kubernetes?"
+О: Да, на двух проектах настраивал кластеры и Helm-чарты, деплой шёл через GitLab CI.
+
+В: "Знаете Flutter?"
+О: С Flutter не работал, но писал API для мобильных приложений — думаю, разберусь быстро.
+
+В: "Готовы оформиться как самозанятый/ИП?"
+О: Да, готов.
+
+В: "Что такое индекс в БД?"
+О: Индекс — структура данных, которая ускоряет поиск по таблице, примерно как алфавитный указатель в книге. Бывают B-tree, hash, GIN, GiST — каждый под свои задачи. B-tree подходит для сортировок и диапазонов, GIN — для полнотекстового поиска и jsonb. Минус — индексы замедляют запись и занимают место, поэтому создавать их нужно по реальным запросам.
+
+Пиши от первого лица. Кратко (1-3 предложения). Без предисловий вроде "На основе резюме..." или "Исходя из моего опыта...".
+
+РЕЗЮМЕ:
+${resumeText}
+
+ВОПРОС:
+${question}`;
+}
+
+// --- Запуски ---
+let compressedResume = '';
+let compressedVacancy = '';
+let facts = '';
+let matchResults = [];
+
+async function runCompress() {
+  const resume = document.getElementById('resume').value;
+  if (!resume) { log('Введите резюме', 'err'); return; }
+  log('Сжимаю резюме...', 'info');
+  try {
+    const r = await askLLM(getResumeCompressPrompt(resume));
+    compressedResume = r.text;
+    try {
+      const json = JSON.parse(r.text.match(/\{[\s\S]*\}/)?.[0] || '');
+      compressedResume = JSON.stringify(json);
+      addResult('Сжатое резюме (JSON)', JSON.stringify(json, null, 2), r.usage, r.elapsed, { resume });
+    } catch {
+      addResult('Сжатое резюме (plain text)', r.text, r.usage, r.elapsed, { resume });
+    }
+    log('Резюме сжато', 'ok');
+  } catch (e) { log(`Ошибка: ${e.message}`, 'err'); }
+}
+
+async function runCompressVacancy() {
+  const vacancy = document.getElementById('vacancy').value;
+  if (!vacancy) { log('Введите вакансию', 'err'); return; }
+  log('Сжимаю вакансию...', 'info');
+  try {
+    const r = await askLLM(getVacancyCompressPrompt(vacancy));
+    compressedVacancy = r.text;
+    addResult('Сжатая вакансия', r.text, r.usage, r.elapsed, { vacancy });
+    log('Вакансия сжата', 'ok');
+  } catch (e) { log(`Ошибка: ${e.message}`, 'err'); }
+}
+
+async function runFacts() {
+  const resume = compressedResume || document.getElementById('resume').value;
+  const vacancy = compressedVacancy || document.getElementById('vacancy').value;
+  if (!resume || !vacancy) { log('Нужны резюме и вакансия', 'err'); return; }
+
+  matchResults = findMatches(resume, vacancy);
+  addResult('Матчинг', matchResults.length > 0 ? matchResults.join(', ') : 'совпадений не найдено', null, null, { resume, vacancy });
+
+  log('Подбираю факты...', 'info');
+  try {
+    const r = await askLLM(getFactsPrompt(resume, '', vacancy));
+    facts = r.text;
+    addResult('Релевантные факты', r.text, r.usage, r.elapsed, { resume, vacancy });
+    log('Факты подобраны', 'ok');
+  } catch (e) { log(`Ошибка: ${e.message}`, 'err'); }
+}
+
+async function runLetter() {
+  const resume = compressedResume || document.getElementById('resume').value;
+  const vacancy = compressedVacancy || document.getElementById('vacancy').value;
+  if (!resume) { log('Нужно резюме', 'err'); return; }
+  log('Генерирую письмо...', 'info');
+  try {
+    const r = await askLLM(getCoverLetterPrompt(resume, vacancy, facts, matchResults));
+    addResult('Сопроводительное письмо', r.text, r.usage, r.elapsed, { resume, vacancy, facts, matches: matchResults.join(', ') });
+    log('Письмо готово', 'ok');
+  } catch (e) { log(`Ошибка: ${e.message}`, 'err'); }
+}
+
+async function runAnswers() {
+  const resume = compressedResume || document.getElementById('resume').value;
+  const questionsRaw = document.getElementById('questions').value.trim();
+  if (!resume) { log('Нужно резюме', 'err'); return; }
+  if (!questionsRaw) { log('Нет вопросов', 'warn'); return; }
+
+  const questions = questionsRaw.split('\n').map(q => q.trim()).filter(Boolean);
+  for (const q of questions) {
+    log(`Отвечаю: "${q}"...`, 'info');
+    try {
+      const r = await askLLM(getAnswerPrompt(resume, q));
+      addResult(`Ответ: "${q}"`, r.text, r.usage, r.elapsed, { resume, question: q });
+      log(`Ответ готов`, 'ok');
+    } catch (e) { log(`Ошибка: ${e.message}`, 'err'); }
+  }
+}
+
+async function runAll() {
+  clearResults();
+  log('Запуск всех тестов...', 'info');
+  await runCompress();
+  await runCompressVacancy();
+  await runFacts();
+  await runLetter();
+  await runAnswers();
+  log('Все тесты завершены', 'ok');
+}
+</script>
+
+</body>
+</html>

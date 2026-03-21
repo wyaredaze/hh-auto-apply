@@ -218,8 +218,8 @@ async function handleFile(file) {
       });
       if (resp && resp.ok && resp.compressed) {
         resumeText = resp.compressed;
-        log(`Резюме сжато (${rawText.length} → ${resumeText.length} символов)`, 'ok');
-        debugResume('Сжатое резюме', resumeText);
+        log(`Резюме сжато (${rawText.length} → ${resumeText.length} символов)${resp.structured ? ' [JSON]' : ''}`, 'ok');
+        debugResume('Сжатое резюме', resp.structured ? JSON.stringify(resp.structured, null, 2) : resumeText);
       } else {
         resumeText = rawText;
         log(`Не удалось сжать: ${resp?.error || 'неизвестная ошибка'}. Используется оригинал`, 'warn');
@@ -239,7 +239,10 @@ async function handleFile(file) {
 
 // --- Drag & Drop ---
 dropZone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+fileInput.addEventListener('change', (e) => {
+  handleFile(e.target.files[0]);
+  fileInput.value = '';
+});
 
 dropZone.addEventListener('dragover', (e) => {
   e.preventDefault();
@@ -316,6 +319,18 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'progress') {
     countSent.textContent = msg.sent;
     countTotal.textContent = msg.total;
+  }
+  if (msg.type === 'debug-tokens') {
+    const el = $('debugTokensLog');
+    const totalEl = $('debugTokensTotal');
+    const div = document.createElement('div');
+    div.style.padding = '2px 0';
+    div.innerHTML = `<span style="color:#888">[${new Date().toLocaleTimeString()}]</span> <span style="color:#ff9800">prompt: ${msg.prompt_tokens}</span> + <span style="color:#4caf50">completion: ${msg.completion_tokens}</span> = <span style="color:#fff; font-weight:bold">${msg.total_tokens}</span>`;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+    // Обновляем общий счётчик
+    const prev = parseInt(totalEl.textContent) || 0;
+    totalEl.textContent = prev + msg.total_tokens;
   }
   if (msg.type === 'debug-vacancy') {
     const el = $('debugVacancyLog');
