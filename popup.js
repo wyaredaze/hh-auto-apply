@@ -164,6 +164,17 @@ function log(text, type = 'info') {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+const debugResumeEl = $('debugResumeLog');
+
+function debugResume(label, text) {
+  const div = document.createElement('div');
+  div.style.borderBottom = '1px solid #1a1a2e';
+  div.style.padding = '4px 0';
+  div.innerHTML = `<span style="color:#6c63ff; font-weight:bold">${label}</span> <span style="color:#888">(${text.length} сим.)</span><br><span style="color:#ccc; white-space:pre-wrap; font-size:11px">${text}</span>`;
+  debugResumeEl.appendChild(div);
+  debugResumeEl.scrollTop = debugResumeEl.scrollHeight;
+}
+
 // --- PDF парсинг ---
 async function parsePDF(file) {
   const arrayBuffer = await file.arrayBuffer();
@@ -187,11 +198,38 @@ async function handleFile(file) {
   dropZone.classList.add('has-file');
   dropZone.textContent = file.name;
 
+  debugResumeEl.innerHTML = '';
+
   try {
     log('Парсинг резюме...');
-    resumeText = await parsePDF(file);
+    const rawText = await parsePDF(file);
+    log(`PDF распознан (${rawText.length} символов). Сжимаю через LLM...`);
+
+    const model = getModel();
+    const provider = providerSelect.value;
+    const apiKey = $('apiKey') ? $('apiKey').value : '';
+    const baseUrl = (provider === 'ollama' || provider === 'lmstudio') ? getProviderBaseUrl() : '';
+
+    try {
+      const resp = await chrome.runtime.sendMessage({
+        action: 'compress-resume',
+        resumeText: rawText,
+        model, provider, apiKey, baseUrl
+      });
+      if (resp && resp.ok && resp.compressed) {
+        resumeText = resp.compressed;
+        log(`Резюме сжато (${rawText.length} → ${resumeText.length} символов)`, 'ok');
+        debugResume('Сжатое резюме', resumeText);
+      } else {
+        resumeText = rawText;
+        log(`Не удалось сжать: ${resp?.error || 'неизвестная ошибка'}. Используется оригинал`, 'warn');
+      }
+    } catch (e) {
+      resumeText = rawText;
+      log(`LLM недоступна для сжатия: ${e.message}. Используется оригинал`, 'warn');
+    }
+
     await chrome.storage.local.set({ resumeText, resumeFileName: file.name });
-    log(`Резюме загружено (${resumeText.length} символов)`, 'ok');
     btnStart.disabled = false;
     btnClearResume.style.display = '';
   } catch (e) {
@@ -238,6 +276,7 @@ chrome.storage.local.get(['resumeText', 'resumeFileName', 'modelName', 'blacklis
     dropZone.textContent = data.resumeFileName || 'Резюме загружено';
     fileName.textContent = data.resumeFileName || '';
     btnClearResume.style.display = '';
+    debugResume('Сохранённое резюме', resumeText);
   }
   if (data.providerUrl) {
     providerUrl.value = data.providerUrl;
@@ -277,6 +316,15 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'progress') {
     countSent.textContent = msg.sent;
     countTotal.textContent = msg.total;
+  }
+  if (msg.type === 'debug-vacancy') {
+    const el = $('debugVacancyLog');
+    const div = document.createElement('div');
+    div.style.borderBottom = '1px solid #1a1a2e';
+    div.style.padding = '4px 0';
+    div.innerHTML = `<span style="color:#6c63ff; font-weight:bold">${msg.title}</span><br><span style="color:#ccc; white-space:pre-wrap">${msg.text}</span>`;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
   }
   if (msg.type === 'debug') {
     const div = document.createElement('div');
