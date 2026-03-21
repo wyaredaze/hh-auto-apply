@@ -104,6 +104,56 @@ async function saveQA(question, answer, vacancyTitle) {
   forwardToPopup({ type: 'qa-updated' });
 }
 
+// --- Программный матчинг резюме и вакансии ---
+function findMatches(resumeText, vacancyText) {
+  const STOP_WORDS = new Set([
+    'и', 'в', 'на', 'с', 'по', 'для', 'от', 'из', 'до', 'не', 'за', 'что', 'как', 'или',
+    'это', 'так', 'все', 'при', 'уже', 'его', 'мы', 'вы', 'они', 'она', 'он', 'быть',
+    'также', 'более', 'будет', 'есть', 'было', 'были', 'был', 'может', 'нет', 'между',
+    'через', 'после', 'перед', 'под', 'над', 'без', 'про', 'обо', 'около',
+    'опыт', 'работа', 'работы', 'знание', 'знания', 'умение', 'навыки', 'навык',
+    'года', 'лет', 'год', 'месяцев', 'понимание', 'использование', 'владение',
+    'the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'was', 'will', 'has', 'have',
+    'experience', 'years', 'work', 'working', 'knowledge', 'skills', 'using', 'ability'
+  ]);
+
+  function extractWords(text) {
+    return text.toLowerCase()
+      .replace(/[()\/\\\[\]{}<>|,;:!?"""''«»—–\-\.]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 2 && !STOP_WORDS.has(w));
+  }
+
+  // Извлекаем биграммы для составных терминов (напр. "clean architecture", "code review")
+  function extractBigrams(text) {
+    const words = extractWords(text);
+    const bigrams = [];
+    for (let i = 0; i < words.length - 1; i++) {
+      bigrams.push(words[i] + ' ' + words[i + 1]);
+    }
+    return bigrams;
+  }
+
+  const resumeWords = new Set(extractWords(resumeText));
+  const vacancyWords = extractWords(vacancyText);
+  const resumeBigrams = new Set(extractBigrams(resumeText));
+  const vacancyBigrams = extractBigrams(vacancyText);
+
+  const matches = new Set();
+
+  // Совпадения по биграммам (приоритет)
+  for (const bg of vacancyBigrams) {
+    if (resumeBigrams.has(bg)) matches.add(bg);
+  }
+
+  // Совпадения по словам
+  for (const w of vacancyWords) {
+    if (resumeWords.has(w)) matches.add(w);
+  }
+
+  return [...matches];
+}
+
 // --- Быстрая локальная дедупликация (без LLM) ---
 function normalizeQuestion(q) {
   return q.toLowerCase().replace(/[^а-яa-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -341,6 +391,13 @@ ${vacancyInfo.description}`, model, provider);
         } catch (e) {
           forwardToPopup({ type: 'log', text: `Не удалось сжать вакансию: ${e.message}`, level: 'warn' });
         }
+      }
+
+      // Если на странице вакансии есть предупреждение о релокации — закрываем его
+      const relocationBefore = await sendToContent(tabId, { action: 'dismissRelocationWarning' });
+      if (relocationBefore.dismissed) {
+        forwardToPopup({ type: 'log', text: 'Подтверждён отклик в другую страну (до отклика)', level: 'info' });
+        await sleep(1500);
       }
 
       // Кликаем "Откликнуться"
@@ -616,13 +673,21 @@ ${qText}`;
         continue;
       }
 
+      const matches = findMatches(resumeText, vacancyInfo.description || '');
+      const matchesHint = matches.length > 0
+        ? `\nСОВПАДЕНИЯ между резюме и вакансией (используй ИХ в первую очередь): ${matches.join(', ')}\n`
+        : '\nСовпадений по ключевым словам не найдено — покажи общий релевантный опыт.\n';
+      forwardToPopup({ type: 'log', text: `Матчинг: ${matches.length} совпадений`, level: 'info' });
+      forwardToPopup({ type: 'debug-vacancy', title: `Матчинг: ${vacancyInfo.title}`, text: matches.length > 0 ? matches.join(', ') : 'совпадений не найдено' });
+
       const coverLetterPrompt = `Напиши короткий отклик на вакансию от лица разработчика. Стиль — как сообщение коллеге, не как официальное письмо.
+${matchesHint}
 
 Правила:
-- СТРОГО бери факты только из резюме. Перед упоминанием любой технологии — проверь что она есть в разделе технологий резюме. Если технологии нет в резюме — не упоминай. Не приписывай роли, которых не было (если в резюме "разработчик" — не пиши "руководил").
-- Сначала найди в требованиях вакансии ГЛАВНЫЙ навык (язык/роль/домен). Затем найди в резюме опыт, который КОНКРЕТНО совпадает с этим навыком. Упоминай этот опыт, а не самый впечатляющий факт из резюме.
+- Бери факты только из резюме. Не упоминай технологии, которых нет в резюме. Не приписывай роли, которых не было.
+- Строй письмо вокруг СОВПАДЕНИЙ (см. выше). Упомяни как можно больше из них. Не заменяй совпадения другими фактами из резюме.
 - Бери факты из РАЗНЫХ мест работы, не только из последнего.
-- Если главный стек вакансии (язык/фреймворк) ОТСУТСТВУЕТ в резюме — честно скажи что опыта с ним нет, но покажи релевантный опыт в похожей области (например: backend, микросервисы, highload) и готовность освоить.
+- Если совпадений нет или главный стек вакансии отсутствует в резюме — честно скажи что опыта с ним нет, но покажи похожий опыт и готовность освоить.
 - Не комментируй вакансию ("интересное направление", "задачи выглядят интересными").
 - Короткие предложения. Без канцелярита.
 
